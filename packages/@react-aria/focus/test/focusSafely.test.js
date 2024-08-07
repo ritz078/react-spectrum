@@ -11,17 +11,24 @@
  */
 
 
-import {act, render} from '@react-spectrum/test-utils';
+import {act, createShadowRoot, render} from '@react-spectrum/test-utils-internal';
 import {focusSafely} from '../';
 import React from 'react';
-import * as ReactAriaUtils from '../../utils/index';
+import * as ReactAriaUtils from '@react-aria/utils';
+import ReactDOM from 'react-dom';
 import {setInteractionModality} from '@react-aria/interactions';
+
+jest.mock('@react-aria/utils', () => {
+  let original = jest.requireActual('@react-aria/utils');
+  return {
+    ...original,
+    focusWithoutScrolling: jest.fn()
+  };
+});
 
 jest.useFakeTimers();
 
 describe('focusSafely', () => {
-  const focusWithoutScrollingSpy = jest.spyOn(ReactAriaUtils, 'focusWithoutScrolling').mockImplementation(() => {});
-
   it("should not focus on the element if it's no longer connected", async function () {
     setInteractionModality('virtual');
 
@@ -40,7 +47,7 @@ describe('focusSafely', () => {
       jest.runAllTimers();
     });
 
-    expect(focusWithoutScrollingSpy).toBeCalledTimes(0);
+    expect(ReactAriaUtils.focusWithoutScrolling).toBeCalledTimes(0);
   });
 
   it("should focus on the element if it's connected", async function () {
@@ -58,6 +65,57 @@ describe('focusSafely', () => {
       jest.runAllTimers();
     });
 
-    expect(focusWithoutScrollingSpy).toBeCalledTimes(1);
+    expect(ReactAriaUtils.focusWithoutScrolling).toBeCalledTimes(1);
+  });
+
+  describe('focusSafely with Shadow DOM', function () {
+    const focusWithoutScrollingSpy = jest.spyOn(ReactAriaUtils, 'focusWithoutScrolling').mockImplementation(() => {});
+
+    it("should not focus on the element if it's no longer connected within shadow DOM", async function () {
+      const {shadowRoot, shadowHost} = createShadowRoot();
+      setInteractionModality('virtual');
+
+      const Example = () => ReactDOM.createPortal(<button>Button</button>, shadowRoot);
+
+      const {unmount} = render(<Example />);
+
+      const button = shadowRoot.querySelector('button');
+
+      requestAnimationFrame(() => {
+        unmount();
+        document.body.removeChild(shadowHost);
+      });
+      expect(button).toBeTruthy();
+      focusSafely(button);
+
+      act(() => {
+        jest.runAllTimers();
+      });
+
+      expect(focusWithoutScrollingSpy).toBeCalledTimes(0);
+    });
+
+    it("should focus on the element if it's connected within shadow DOM", async function () {
+      const {shadowRoot} = createShadowRoot();
+      setInteractionModality('virtual');
+
+      const Example = () => ReactDOM.createPortal(<button>Button</button>, shadowRoot);
+
+      const {unmount} = render(<Example />);
+
+      const button = shadowRoot.querySelector('button');
+
+      expect(button).toBeTruthy();
+      focusSafely(button);
+
+      act(() => {
+        jest.runAllTimers();
+      });
+
+      expect(focusWithoutScrollingSpy).toBeCalledTimes(1);
+
+      unmount();
+      shadowRoot.host.remove();
+    });
   });
 });

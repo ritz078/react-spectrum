@@ -15,11 +15,25 @@
 // NOTICE file in the root directory of this source tree.
 // See https://github.com/facebook/react/tree/cc7c1aece46a6b69b41958d731e0fd27c94bfc6c/packages/react-interactions
 
-import {chain, focusWithoutScrolling, getOwnerDocument, getOwnerWindow, isMac, isVirtualClick, isVirtualPointerEvent, mergeProps, openLink, useEffectEvent, useGlobalListeners, useSyncRef} from '@react-aria/utils';
+import {
+  chain,
+  focusWithoutScrolling,
+  getOwnerDocument,
+  getOwnerWindow,
+  getRootNode,
+  isMac,
+  isVirtualClick,
+  isVirtualPointerEvent,
+  mergeProps,
+  openLink,
+  useEffectEvent,
+  useGlobalListeners,
+  useSyncRef
+} from '@react-aria/utils';
 import {disableTextSelection, restoreTextSelection} from './textSelection';
-import {DOMAttributes, FocusableElement, PressEvent as IPressEvent, PointerType, PressEvents} from '@react-types/shared';
+import {DOMAttributes, FocusableElement, PressEvent as IPressEvent, PointerType, PressEvents, RefObject} from '@react-types/shared';
 import {PressResponderContext} from './context';
-import {RefObject, useContext, useEffect, useMemo, useRef, useState} from 'react';
+import {TouchEvent as RTouchEvent, useContext, useEffect, useMemo, useRef, useState} from 'react';
 
 export interface PressProps extends PressEvents {
   /** Whether the target is in a controlled press state (e.g. an overlay it triggers is open). */
@@ -41,7 +55,7 @@ export interface PressProps extends PressEvents {
 
 export interface PressHookProps extends PressProps {
   /** A ref to the target element. */
-  ref?: RefObject<Element>
+  ref?: RefObject<Element | null>
 }
 
 interface PressState {
@@ -63,7 +77,10 @@ interface EventBase {
   shiftKey: boolean,
   ctrlKey: boolean,
   metaKey: boolean,
-  altKey: boolean
+  altKey: boolean,
+  clientX?: number,
+  clientY?: number,
+  targetTouches?: Array<{clientX?: number, clientY?: number}>
 }
 
 export interface PressResult {
@@ -94,9 +111,28 @@ class PressEvent implements IPressEvent {
   ctrlKey: boolean;
   metaKey: boolean;
   altKey: boolean;
+  x: number;
+  y: number;
   #shouldStopPropagation = true;
 
-  constructor(type: IPressEvent['type'], pointerType: PointerType, originalEvent: EventBase) {
+  constructor(type: IPressEvent['type'], pointerType: PointerType, originalEvent: EventBase, state?: PressState) {
+    let currentTarget = state?.target ?? originalEvent.currentTarget;
+    const rect: DOMRect | undefined = (currentTarget as Element)?.getBoundingClientRect();
+    let x, y = 0;
+    let clientX, clientY: number | null = null;
+    if (originalEvent.clientX != null && originalEvent.clientY != null) {
+      clientX = originalEvent.clientX;
+      clientY = originalEvent.clientY;
+    }
+    if (rect) {
+      if (clientX != null && clientY != null) {
+        x = clientX - rect.left;
+        y = clientY - rect.top;
+      } else {
+        x = rect.width / 2;
+        y = rect.height / 2;
+      }
+    }
     this.type = type;
     this.pointerType = pointerType;
     this.target = originalEvent.currentTarget as Element;
@@ -104,6 +140,8 @@ class PressEvent implements IPressEvent {
     this.metaKey = originalEvent.metaKey;
     this.ctrlKey = originalEvent.ctrlKey;
     this.altKey = originalEvent.altKey;
+    this.x = x;
+    this.y = y;
   }
 
   continuePropagation() {
@@ -279,7 +317,9 @@ export function usePress(props: PressHookProps): PressResult {
               }
             };
 
-            addGlobalListener(getOwnerDocument(e.currentTarget), 'keyup', chain(pressUp, onKeyUp), true);
+            const ownerDocument = getRootNode(e.currentTarget) || getOwnerDocument(e.currentTarget);
+
+            addGlobalListener(ownerDocument, 'keyup', chain(pressUp, onKeyUp), true);
           }
 
           if (shouldStopPropagation) {
@@ -409,9 +449,11 @@ export function usePress(props: PressHookProps): PressResult {
 
           shouldStopPropagation = triggerPressStart(e, state.pointerType);
 
-          addGlobalListener(getOwnerDocument(e.currentTarget), 'pointermove', onPointerMove, false);
-          addGlobalListener(getOwnerDocument(e.currentTarget), 'pointerup', onPointerUp, false);
-          addGlobalListener(getOwnerDocument(e.currentTarget), 'pointercancel', onPointerCancel, false);
+          const ownerDocument = getRootNode(e.currentTarget) || getOwnerDocument(e.currentTarget);
+
+          addGlobalListener(ownerDocument, 'pointermove', onPointerMove, false);
+          addGlobalListener(ownerDocument, 'pointerup', onPointerUp, false);
+          addGlobalListener(ownerDocument, 'pointercancel', onPointerCancel, false);
         }
 
         if (shouldStopPropagation) {
@@ -532,8 +574,9 @@ export function usePress(props: PressHookProps): PressResult {
         if (shouldStopPropagation) {
           e.stopPropagation();
         }
+        const ownerDocument = getRootNode(e.currentTarget) || getOwnerDocument(e.currentTarget);
 
-        addGlobalListener(getOwnerDocument(e.currentTarget), 'mouseup', onMouseUp, false);
+        addGlobalListener(ownerDocument, 'mouseup', onMouseUp, false);
       };
 
       pressProps.onMouseEnter = (e) => {
@@ -628,7 +671,7 @@ export function usePress(props: PressHookProps): PressResult {
           disableTextSelection(state.target);
         }
 
-        let shouldStopPropagation = triggerPressStart(e, state.pointerType);
+        let shouldStopPropagation = triggerPressStart(createTouchEvent(state.target, e), state.pointerType);
         if (shouldStopPropagation) {
           e.stopPropagation();
         }
@@ -651,12 +694,12 @@ export function usePress(props: PressHookProps): PressResult {
         if (touch && isOverTarget(touch, e.currentTarget)) {
           if (!state.isOverTarget && state.pointerType != null) {
             state.isOverTarget = true;
-            shouldStopPropagation = triggerPressStart(e, state.pointerType);
+            shouldStopPropagation = triggerPressStart(createTouchEvent(state.target!, e), state.pointerType);
           }
         } else if (state.isOverTarget && state.pointerType != null) {
           state.isOverTarget = false;
-          shouldStopPropagation = triggerPressEnd(e, state.pointerType, false);
-          cancelOnPointerExit(e);
+          shouldStopPropagation = triggerPressEnd(createTouchEvent(state.target!, e), state.pointerType, false);
+          cancelOnPointerExit(createTouchEvent(state.target!, e));
         }
 
         if (shouldStopPropagation) {
@@ -677,10 +720,10 @@ export function usePress(props: PressHookProps): PressResult {
         let touch = getTouchById(e.nativeEvent, state.activePointerId);
         let shouldStopPropagation = true;
         if (touch && isOverTarget(touch, e.currentTarget) && state.pointerType != null) {
-          triggerPressUp(e, state.pointerType);
-          shouldStopPropagation = triggerPressEnd(e, state.pointerType);
+          triggerPressUp(createTouchEvent(state.target!, e), state.pointerType);
+          shouldStopPropagation = triggerPressEnd(createTouchEvent(state.target!, e), state.pointerType);
         } else if (state.isOverTarget && state.pointerType != null) {
-          shouldStopPropagation = triggerPressEnd(e, state.pointerType, false);
+          shouldStopPropagation = triggerPressEnd(createTouchEvent(state.target!, e), state.pointerType, false);
         }
 
         if (shouldStopPropagation) {
@@ -704,7 +747,7 @@ export function usePress(props: PressHookProps): PressResult {
 
         e.stopPropagation();
         if (state.isPressed) {
-          cancel(e);
+          cancel(createTouchEvent(state.target!, e));
         }
       };
 
@@ -802,13 +845,35 @@ function getTouchById(
   return null;
 }
 
-function createEvent(target: FocusableElement, e: EventBase): EventBase {
+function createTouchEvent(target: FocusableElement, e: RTouchEvent<FocusableElement>): EventBase {
+  let clientX = 0;
+  let clientY = 0;
+  if (e.targetTouches && e.targetTouches.length === 1) {
+    clientX = e.targetTouches[0].clientX;
+    clientY = e.targetTouches[0].clientY;
+  }
   return {
     currentTarget: target,
     shiftKey: e.shiftKey,
     ctrlKey: e.ctrlKey,
     metaKey: e.metaKey,
-    altKey: e.altKey
+    altKey: e.altKey,
+    clientX,
+    clientY
+  };
+}
+
+function createEvent(target: FocusableElement, e: EventBase): EventBase {
+  let clientX = e.clientX;
+  let clientY = e.clientY;
+  return {
+    currentTarget: target,
+    shiftKey: e.shiftKey,
+    ctrlKey: e.ctrlKey,
+    metaKey: e.metaKey,
+    altKey: e.altKey,
+    clientX,
+    clientY
   };
 }
 
