@@ -10,7 +10,16 @@
  * governing permissions and limitations under the License.
  */
 
-import {chain, getScrollParent, mergeProps, scrollIntoViewport, useSlotId, useSyntheticLinkProps} from '@react-aria/utils';
+import {
+  chain,
+  getDeepActiveElement,
+  getRootNode,
+  getScrollParent,
+  mergeProps,
+  scrollIntoViewport,
+  useSlotId,
+  useSyntheticLinkProps
+} from '@react-aria/utils';
 import {DOMAttributes, FocusableElement, RefObject, Node as RSNode} from '@react-types/shared';
 import {focusSafely, getFocusableTreeWalker} from '@react-aria/focus';
 import {getLastItem} from '@react-stately/collections';
@@ -76,9 +85,10 @@ export function useGridListItem<T>(props: AriaGridListItemOptions, state: ListSt
   let focus = () => {
     // Don't shift focus to the row if the active element is a element within the row already
     // (e.g. clicking on a row button)
+    const activeElement = getDeepActiveElement(getRootNode(ref.current));
     if (
       (keyWhenFocused.current != null && node.key !== keyWhenFocused.current) ||
-      !ref.current?.contains(document.activeElement)
+      !ref.current?.contains(activeElement)
     ) {
       focusSafely(ref.current);
     }
@@ -123,9 +133,10 @@ export function useGridListItem<T>(props: AriaGridListItemOptions, state: ListSt
     }
 
     let walker = getFocusableTreeWalker(ref.current);
-    walker.currentNode = document.activeElement;
+    const activeElement = getDeepActiveElement(getRootNode(ref.current));
+    walker.currentNode = activeElement;
 
-    if ('expandedKeys' in state && document.activeElement === ref.current) {
+    if ('expandedKeys' in state && activeElement === ref.current) {
       if ((e.key === EXPANSION_KEYS['expand'][direction]) && state.selectionManager.focusedKey === node.key && hasChildRows && !state.expandedKeys.has(node.key)) {
         state.toggleKey(node.key);
         e.stopPropagation();
@@ -216,7 +227,7 @@ export function useGridListItem<T>(props: AriaGridListItemOptions, state: ListSt
           // If there is another focusable element within this item, stop propagation so the tab key
           // is handled by the browser and not by useSelectableCollection (which would take us out of the list).
           let walker = getFocusableTreeWalker(ref.current, {tabbable: true});
-          walker.currentNode = document.activeElement;
+          walker.currentNode = getDeepActiveElement(getRootNode(ref.current));
           let next = e.shiftKey ? walker.previousNode() : walker.nextNode();
           if (next) {
             e.stopPropagation();
