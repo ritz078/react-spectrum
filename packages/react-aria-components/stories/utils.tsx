@@ -7,6 +7,7 @@ export const MyListBoxItem = (props: ListBoxItemProps) => {
   return (
     <ListBoxItem
       {...props}
+      style={{wordBreak: 'break-word', ...props.style}}
       className={({isFocused, isSelected, isHovered}) => classNames(styles, 'item', {
         focused: isFocused,
         selected: isSelected,
@@ -19,10 +20,11 @@ export const MyMenuItem = (props: MenuItemProps) => {
   return (
     <MenuItem
       {...props}
-      className={({isFocused, isSelected, isOpen}) => classNames(styles, 'item', {
+      className={({isFocused, isSelected, isOpen, isFocusVisible}) => classNames(styles, 'item', {
         focused: isFocused,
         selected: isSelected,
-        open: isOpen
+        open: isOpen,
+        focusVisible: isFocusVisible
       })} />
   );
 };

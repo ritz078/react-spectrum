@@ -12,9 +12,10 @@
 
 import {AriaRadioProps} from '@react-types/radio';
 import {filterDOMProps, mergeProps, useFormReset} from '@react-aria/utils';
-import {InputHTMLAttributes, LabelHTMLAttributes, RefObject} from 'react';
+import {InputHTMLAttributes, LabelHTMLAttributes} from 'react';
 import {radioGroupData} from './utils';
 import {RadioGroupState} from '@react-stately/radio';
+import {RefObject} from '@react-types/shared';
 import {useFocusable} from '@react-aria/focus';
 import {useFormValidation} from '@react-aria/form';
 import {usePress} from '@react-aria/interactions';
@@ -39,7 +40,7 @@ export interface RadioAria {
  * @param state - State for the radio group, as returned by `useRadioGroupState`.
  * @param ref - Ref to the HTML input element.
  */
-export function useRadio(props: AriaRadioProps, state: RadioGroupState, ref: RefObject<HTMLInputElement>): RadioAria {
+export function useRadio(props: AriaRadioProps, state: RadioGroupState, ref: RefObject<HTMLInputElement | null>): RadioAria {
   let {
     value,
     children,
@@ -62,16 +63,14 @@ export function useRadio(props: AriaRadioProps, state: RadioGroupState, ref: Ref
     state.setSelectedValue(value);
   };
 
+  // Handle press state for keyboard interactions and cases where labelProps is not used.
   let {pressProps, isPressed} = usePress({
     isDisabled
   });
 
-  // iOS does not toggle radios if you drag off and back onto the label, so handle it ourselves.
+  // Handle press state on the label.
   let {pressProps: labelProps, isPressed: isLabelPressed} = usePress({
-    isDisabled,
-    onPress() {
-      state.setSelectedValue(value);
-    }
+    isDisabled
   });
 
   let {focusableProps} = useFocusable(mergeProps(props, {
@@ -96,7 +95,7 @@ export function useRadio(props: AriaRadioProps, state: RadioGroupState, ref: Ref
   useFormValidation({validationBehavior}, state, ref);
 
   return {
-    labelProps: mergeProps(labelProps, {onClick: e => e.preventDefault()}),
+    labelProps,
     inputProps: mergeProps(domProps, {
       ...interactions,
       type: 'radio',

@@ -10,8 +10,8 @@
  * governing permissions and limitations under the License.
  */
 
-import {fireEvent, pointerMap, render} from '@react-spectrum/test-utils';
 import {Link, LinkContext, RouterProvider} from '../';
+import {pointerMap, render} from '@react-spectrum/test-utils-internal';
 import React from 'react';
 import userEvent from '@testing-library/user-event';
 
@@ -107,7 +107,7 @@ describe('Link', () => {
     expect(link).not.toHaveClass('focus');
   });
 
-  it('should support press state', () => {
+  it('should support press state', async () => {
     let onPress = jest.fn();
     let {getByRole} = render(<Link className={({isPressed}) => isPressed ? 'pressed' : ''} onPress={onPress}>Test</Link>);
     let link = getByRole('link');
@@ -115,11 +115,11 @@ describe('Link', () => {
     expect(link).not.toHaveAttribute('data-pressed');
     expect(link).not.toHaveClass('pressed');
 
-    fireEvent.mouseDown(link);
+    await user.pointer({target: link, keys: '[MouseLeft>]'});
     expect(link).toHaveAttribute('data-pressed', 'true');
     expect(link).toHaveClass('pressed');
 
-    fireEvent.mouseUp(link);
+    await user.pointer({target: link, keys: '[/MouseLeft]'});
     expect(link).not.toHaveAttribute('data-pressed');
     expect(link).not.toHaveClass('pressed');
 
@@ -136,9 +136,15 @@ describe('Link', () => {
 
   it('should work with RouterProvider', async () => {
     let navigate = jest.fn();
-    let {getByRole} = render(<RouterProvider navigate={navigate}><Link href="/foo">Test</Link></RouterProvider>);
+    let useHref = href => '/base' + href;
+    let {getByRole} = render(
+      <RouterProvider navigate={navigate} useHref={useHref}>
+        <Link href="/foo" routerOptions={{foo: 'bar'}}>Test</Link>
+      </RouterProvider>
+    );
     let link = getByRole('link');
+    expect(link).toHaveAttribute('href', '/base/foo');
     await user.click(link);
-    expect(navigate).toHaveBeenCalledWith('/foo');
+    expect(navigate).toHaveBeenCalledWith('/foo', {foo: 'bar'});
   });
 });

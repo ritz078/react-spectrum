@@ -10,7 +10,7 @@
  * governing permissions and limitations under the License.
  */
 
-import {fireEvent, pointerMap, render} from '@react-spectrum/test-utils';
+import {pointerMap, render} from '@react-spectrum/test-utils-internal';
 import React from 'react';
 import {Switch, SwitchContext} from '../';
 import userEvent from '@testing-library/user-event';
@@ -138,18 +138,18 @@ describe('Switch', () => {
     expect(onFocusChange).toHaveBeenLastCalledWith(false);
   });
 
-  it('should support press state', () => {
+  it('should support press state', async () => {
     let {getByRole} = render(<Switch className={({isPressed}) => isPressed ? 'pressed' : ''}>Test</Switch>);
     let s = getByRole('switch').closest('label');
 
     expect(s).not.toHaveAttribute('data-pressed');
     expect(s).not.toHaveClass('pressed');
 
-    fireEvent.mouseDown(s);
+    await user.pointer({target: s, keys: '[MouseLeft>]'});
     expect(s).toHaveAttribute('data-pressed', 'true');
     expect(s).toHaveClass('pressed');
 
-    fireEvent.mouseUp(s);
+    await user.pointer({target: s, keys: '[/MouseLeft]'});
     expect(s).not.toHaveAttribute('data-pressed');
     expect(s).not.toHaveClass('pressed');
   });
@@ -210,5 +210,23 @@ describe('Switch', () => {
     let ref = React.createRef();
     let {getByRole} = render(<Switch ref={ref}>Test</Switch>);
     expect(ref.current).toBe(getByRole('switch').closest('.react-aria-Switch'));
+  });
+
+  it('should support input ref', () => {
+    let inputRef = React.createRef();
+    let {getByRole} = render(<Switch inputRef={inputRef}>Test</Switch>);
+    expect(inputRef.current).toBe(getByRole('switch'));
+  });
+
+  it('should support and merge input ref on context', () => {
+    let inputRef = React.createRef();
+    let contextInputRef = React.createRef();
+    let {getByRole} = render(
+      <SwitchContext.Provider value={{inputRef: contextInputRef}}>
+        <Switch inputRef={inputRef}>Test</Switch>
+      </SwitchContext.Provider>
+    );
+    expect(inputRef.current).toBe(getByRole('switch'));
+    expect(contextInputRef.current).toBe(getByRole('switch'));
   });
 });

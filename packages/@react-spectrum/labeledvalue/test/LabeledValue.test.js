@@ -13,7 +13,7 @@
 import {CalendarDate, CalendarDateTime, Time, ZonedDateTime} from '@internationalized/date';
 import {LabeledValue} from '../src';
 import React from 'react';
-import {render, within} from '@react-spectrum/test-utils';
+import {render, within} from '@react-spectrum/test-utils-internal';
 
 describe('LabeledValue', function () {
   it('renders a label', function () {
@@ -273,6 +273,37 @@ describe('LabeledValue', function () {
     let staticField = getByTestId('test-id');
     expect(staticField).toBeInTheDocument();
     expect(staticField).toHaveTextContent('10 – 20');
+  });
+
+  it('renders correctly with ReactElement value', function () {
+    let {getByTestId} = render(
+      <LabeledValue
+        data-testid="test-id"
+        label="Field label"
+        value={<a href="https://test.com">test</a>} />
+    );
+
+    let staticField = getByTestId('test-id');
+    expect(staticField).toBeInTheDocument();
+    expect(staticField).toHaveTextContent('test');
+    expect(
+      within(staticField).getByRole('link', {name: 'test'})
+    ).toBeInTheDocument();
+  });
+
+  it('throws when an editable value is provided', async function () {
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    let errorMessage;
+    try {
+      render(
+        <LabeledValue
+          label="Field label"
+          value={<input />} />
+      );
+    } catch (e) {
+      errorMessage = e.message;
+    }
+    expect(errorMessage).toEqual('LabeledValue cannot contain an editable value.');
   });
 
   it('attaches a user provided ref to the outer div', function () {

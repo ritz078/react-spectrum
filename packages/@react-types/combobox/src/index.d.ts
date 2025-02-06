@@ -36,7 +36,7 @@ export type MenuTriggerAction = 'focus' | 'input' | 'manual';
 
 export interface ComboBoxValidationValue {
   /** The selected key in the ComboBox. */
-  selectedKey: Key,
+  selectedKey: Key | null,
   /** The value of the ComboBox input. */
   inputValue: string
 }
@@ -49,7 +49,7 @@ export interface ComboBoxProps<T> extends CollectionBase<T>, Omit<SingleSelectio
   /** Method that is called when the open state of the menu changes. Returns the new open state and the action that caused the opening of the menu. */
   onOpenChange?: (isOpen: boolean, menuTrigger?: MenuTriggerAction) => void,
   /** Handler that is called when the selection changes. */
-  onSelectionChange?: (key: Key | null) => any,
+  onSelectionChange?: (key: Key | null) => void,
   /** The value of the ComboBox input (controlled). */
   inputValue?: string,
   /** The default value of the ComboBox input (uncontrolled). */

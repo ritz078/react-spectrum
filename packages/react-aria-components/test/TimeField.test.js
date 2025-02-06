@@ -10,7 +10,7 @@
  * governing permissions and limitations under the License.
  */
 
-import {act, installPointerEvent, pointerMap, render, within} from '@react-spectrum/test-utils';
+import {act, installPointerEvent, pointerMap, render, within} from '@react-spectrum/test-utils-internal';
 import {DateInput, DateSegment, FieldError, Label, Text, TimeField, TimeFieldContext} from '../';
 import React from 'react';
 import {Time} from '@internationalized/date';
@@ -37,7 +37,7 @@ describe('TimeField', () => {
     );
 
     let input = getByRole('group');
-    expect(input).toHaveTextContent('––:–– AM');
+    expect(input.textContent.replace(' ', ' ').replace(/[\u2066-\u2069]/g, '')).toBe('––:–– AM');
     expect(input).toHaveAttribute('class', 'react-aria-DateInput');
     expect(input).toHaveAttribute('data-bar', 'foo');
 

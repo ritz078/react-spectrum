@@ -10,7 +10,7 @@
  * governing permissions and limitations under the License.
  */
 
-import {act, pointerMap, render, within} from '@react-spectrum/test-utils';
+import {act, pointerMap, render, within} from '@react-spectrum/test-utils-internal';
 import {Button, Calendar, CalendarCell, CalendarGrid, DateInput, DatePicker, DatePickerContext, DateSegment, Dialog, FieldError, Group, Heading, Label, Popover, Text} from 'react-aria-components';
 import {CalendarDate} from '@internationalized/date';
 import React from 'react';
@@ -55,7 +55,7 @@ describe('DatePicker', () => {
     let group = getByRole('group');
     let input = group.querySelector('.react-aria-DateInput');
     let button = getByRole('button');
-    expect(input).toHaveTextContent('mm/dd/yyyy');
+    expect(input.textContent.replace(/[\u2066-\u2069]/g, '')).toBe('mm/dd/yyyy');
     expect(button).toHaveAttribute('aria-label', 'Calendar');
 
     expect(input.closest('.react-aria-DatePicker')).toHaveAttribute('data-foo', 'bar');
@@ -270,5 +270,8 @@ describe('DatePicker', () => {
     for (let spinbutton of spinbuttons) {
       expect(spinbutton).toHaveAttribute('aria-disabled', 'true');
     }
+
+    let hiddenInput = getByRole('textbox', {hidden: true});
+    expect(hiddenInput).toHaveAttribute('disabled');
   });
 });

@@ -18,7 +18,7 @@ import {
   render as renderComponent,
   waitFor,
   within
-} from '@react-spectrum/test-utils';
+} from '@react-spectrum/test-utils-internal';
 import {Cell, Column, Row, TableBody, TableHeader, TableView} from '../';
 import {CUSTOM_DRAG_TYPE} from '@react-aria/dnd/src/constants';
 import {DataTransfer, DataTransferItem, DragEvent, FileSystemDirectoryEntry, FileSystemFileEntry} from '@react-aria/dnd/test/mocks';
@@ -232,7 +232,7 @@ describe('TableView', function () {
         let {getByRole, getAllByText} = render(
           <DraggbleWithoutRowHeader tableViewProps={{selectedKeys: ['a'], selectionStyle: 'checkbox'}} />
         );
-      
+
         let grid = getByRole('grid');
         let rowgroups = within(grid).getAllByRole('rowgroup');
         let rows = within(rowgroups[1]).getAllByRole('row');
@@ -240,9 +240,9 @@ describe('TableView', function () {
         let cell = within(row).getAllByRole('rowheader')[0];
         let cellText = getAllByText(cell.textContent);
         expect(cellText).toHaveLength(1);
-      
+
         let dataTransfer = new DataTransfer();
-      
+
         fireEvent.pointerDown(cell, {pointerType: 'mouse', button: 0, pointerId: 1, clientX: 5, clientY: 5});
         fireEvent(cell, new DragEvent('dragstart', {dataTransfer, clientX: 5, clientY: 5}));
 
@@ -414,10 +414,29 @@ describe('TableView', function () {
         });
       });
 
-      it('should not allow drag operations on a disabled row', function () {
+      it('should allow drag operations on a disabled row with disabledBehavior="selection"', function () {
         let {getByRole} = render(
-          <DraggableTableView tableViewProps={{disabledKeys: ['a']}} />
-      );
+          <DraggableTableView tableViewProps={{disabledBehavior: 'selection', disabledKeys: ['a']}} />
+        );
+
+        let grid = getByRole('grid');
+        let rowgroups = within(grid).getAllByRole('rowgroup');
+        let rows = within(rowgroups[1]).getAllByRole('row');
+        let row = rows[0];
+        let cell = within(row).getAllByRole('rowheader')[0];
+        expect(cell).toHaveTextContent('Vin');
+        expect(row).toHaveAttribute('draggable', 'true');
+
+        let dataTransfer = new DataTransfer();
+        fireEvent.pointerDown(cell, {pointerType: 'mouse', button: 0, pointerId: 1, clientX: 0, clientY: 0});
+        fireEvent(cell, new DragEvent('dragstart', {dataTransfer, clientX: 0, clientY: 0}));
+        expect(onDragStart).toHaveBeenCalledTimes(1);
+      });
+
+      it('should not allow drag operations on a disabled row with disabledBehavior="all"', function () {
+        let {getByRole} = render(
+          <DraggableTableView tableViewProps={{disabledBehavior: 'all', disabledKeys: ['a']}} />
+        );
 
         let grid = getByRole('grid');
         let rowgroups = within(grid).getAllByRole('rowgroup');
@@ -1744,8 +1763,9 @@ describe('TableView', function () {
         expect(draghandle).toBeTruthy();
         expect(draghandle).toHaveAttribute('draggable', 'true');
 
-        fireEvent.keyDown(draghandle, {key: 'Enter'});
-        fireEvent.keyUp(draghandle, {key: 'Enter'});
+        await user.tab();
+        await user.keyboard('{ArrowRight}');
+        await user.keyboard('{Enter}');
 
         expect(onDragStart).toHaveBeenCalledTimes(1);
         expect(onDragStart).toHaveBeenCalledWith({
@@ -1757,8 +1777,7 @@ describe('TableView', function () {
 
         act(() => jest.runAllTimers());
         expect(document.activeElement).toBe(droppable);
-        fireEvent.keyDown(droppable, {key: 'Enter'});
-        fireEvent.keyUp(droppable, {key: 'Enter'});
+        await user.keyboard('{Enter}');
 
         expect(onDrop).toHaveBeenCalledTimes(1);
         expect(await onDrop.mock.calls[0][0].items[0].getText('text/plain')).toBe('Vin Charlet');
@@ -1777,7 +1796,7 @@ describe('TableView', function () {
       it('should allow drag and drop of multiple rows', async function () {
         let {getByRole, getByText} = render(
           <DraggableTableView tableViewProps={{selectedKeys: ['a', 'b', 'c', 'd']}} />
-      );
+        );
 
         let droppable = getByText('Drop here');
         let grid = getByRole('grid');
@@ -1801,11 +1820,13 @@ describe('TableView', function () {
         expect(rows[3]).toHaveAttribute('draggable', 'true');
 
         await user.tab();
+        await user.tab();
         let draghandle = within(rows[0]).getAllByRole('button')[0];
         expect(draghandle).toBeTruthy();
 
-        fireEvent.keyDown(draghandle, {key: 'Enter'});
-        fireEvent.keyUp(draghandle, {key: 'Enter'});
+        await user.keyboard('{ArrowRight}');
+        expect(document.activeElement).toBe(draghandle);
+        await user.keyboard('{Enter}');
 
         expect(onDragStart).toHaveBeenCalledTimes(1);
         expect(onDragStart).toHaveBeenCalledWith({
@@ -1817,8 +1838,7 @@ describe('TableView', function () {
 
         act(() => jest.runAllTimers());
         expect(document.activeElement).toBe(droppable);
-        fireEvent.keyDown(droppable, {key: 'Enter'});
-        fireEvent.keyUp(droppable, {key: 'Enter'});
+        await user.keyboard('{Enter}');
 
         expect(onDrop).toHaveBeenCalledTimes(1);
 
@@ -1853,8 +1873,10 @@ describe('TableView', function () {
         let draghandle = within(rows[0]).getAllByRole('button')[0];
         expect(draghandle).toBeTruthy();
 
-        fireEvent.keyDown(draghandle, {key: 'Enter'});
-        fireEvent.keyUp(draghandle, {key: 'Enter'});
+        await user.tab();
+        await user.keyboard('{ArrowRight}');
+        expect(document.activeElement).toBe(draghandle);
+        await user.keyboard('{Enter}');
 
         let dndState = globalDndState;
         expect(dndState).toEqual({draggingCollectionRef: expect.any(Object), draggingKeys: new Set(['a', 'b', 'c', 'd'])});
@@ -1862,8 +1884,7 @@ describe('TableView', function () {
         act(() => jest.runAllTimers());
 
         expect(document.activeElement).toBe(droppable);
-        fireEvent.keyDown(droppable, {key: 'Enter'});
-        fireEvent.keyUp(droppable, {key: 'Enter'});
+        await user.keyboard('{Enter}');
 
         dndState = globalDndState;
         expect(dndState).toEqual({draggingKeys: new Set()});
@@ -1891,8 +1912,10 @@ describe('TableView', function () {
         let draghandle = within(rows[0]).getAllByRole('button')[0];
         expect(draghandle).toBeTruthy();
 
-        fireEvent.keyDown(draghandle, {key: 'Enter'});
-        fireEvent.keyUp(draghandle, {key: 'Enter'});
+        await user.tab();
+        await user.keyboard('{ArrowRight}');
+        expect(document.activeElement).toBe(draghandle);
+        await user.keyboard('{Enter}');
 
         let dndState = globalDndState;
         expect(dndState).toEqual({draggingCollectionRef: expect.any(Object), draggingKeys: new Set(['a', 'b', 'c', 'd'])});
@@ -1900,8 +1923,7 @@ describe('TableView', function () {
         act(() => jest.runAllTimers());
 
         expect(document.activeElement).toBe(droppable);
-        fireEvent.keyDown(droppable, {key: 'Escape'});
-        fireEvent.keyUp(droppable, {key: 'Escape'});
+        await user.keyboard('{Escape}');
 
         dndState = globalDndState;
         expect(dndState).toEqual({draggingKeys: new Set()});
@@ -1920,8 +1942,8 @@ describe('TableView', function () {
         let draghandle = within(rows[0]).getAllByRole('button')[0];
         expect(draghandle).toBeTruthy();
         expect(draghandle).toHaveAttribute('draggable', 'true');
-        fireEvent.keyDown(draghandle, {key: 'Enter'});
-        fireEvent.keyUp(draghandle, {key: 'Enter'});
+        await user.keyboard('{ArrowRight}');
+        await user.keyboard('{Enter}');
         act(() => jest.runAllTimers());
 
         // First drop target should be an internal folder, hence setting dropCollectionRef
@@ -1929,8 +1951,7 @@ describe('TableView', function () {
         expect(dndState.dropCollectionRef.current).toBe(table);
 
         // Canceling the drop operation should clear dropCollectionRef before onDragEnd fires, resulting in isInternal = false
-        fireEvent.keyDown(document.body, {key: 'Escape'});
-        fireEvent.keyUp(document.body, {key: 'Escape'});
+        await user.keyboard('{Escape}');
         dndState = globalDndState;
         expect(dndState.dropCollectionRef).toBeFalsy();
         expect(onDragEnd).toHaveBeenCalledTimes(1);
@@ -1957,8 +1978,9 @@ describe('TableView', function () {
           let draghandle = within(row).getAllByRole('button')[0];
           expect(draghandle).toBeTruthy();
           expect(draghandle).toHaveAttribute('draggable', 'true');
-          fireEvent.keyDown(draghandle, {key: 'Enter'});
-          fireEvent.keyUp(draghandle, {key: 'Enter'});
+          await user.keyboard('{ArrowRight}');
+          expect(document.activeElement).toBe(draghandle);
+          await user.keyboard('{Enter}');
           act(() => jest.runAllTimers());
         }
 
@@ -1970,12 +1992,9 @@ describe('TableView', function () {
           await beginDrag(tree);
           // Move to 2nd table's first insert indicator
           await user.tab();
-          fireEvent.keyDown(document.activeElement, {key: 'ArrowDown'});
-          fireEvent.keyUp(document.activeElement, {key: 'ArrowDown'});
-
+          await user.keyboard('{ArrowDown}');
           expect(document.activeElement).toHaveAttribute('aria-label', 'Insert before Pictures');
-          fireEvent.keyDown(document.activeElement, {key: 'Enter'});
-          fireEvent.keyUp(document.activeElement, {key: 'Enter'});
+          await user.keyboard('{Enter}');
 
           expect(onReorder).toHaveBeenCalledTimes(0);
           expect(onItemDrop).toHaveBeenCalledTimes(0);
@@ -2081,14 +2100,11 @@ describe('TableView', function () {
 
           await beginDrag(tree);
           await user.tab();
-          fireEvent.keyDown(document.activeElement, {key: 'ArrowDown'});
-          fireEvent.keyUp(document.activeElement, {key: 'ArrowDown'});
-          fireEvent.keyDown(document.activeElement, {key: 'ArrowDown'});
-          fireEvent.keyUp(document.activeElement, {key: 'ArrowDown'});
+          await user.keyboard('{ArrowDown}');
+          await user.keyboard('{ArrowDown}');
 
           expect(document.activeElement).toHaveAttribute('aria-label', 'Drop on Pictures');
-          fireEvent.keyDown(document.activeElement, {key: 'Enter'});
-          fireEvent.keyUp(document.activeElement, {key: 'Enter'});
+          await user.keyboard('{Enter}');
 
           expect(onReorder).toHaveBeenCalledTimes(0);
           expect(onItemDrop).toHaveBeenCalledTimes(1);
@@ -2125,16 +2141,34 @@ describe('TableView', function () {
             type: 'file',
             name: 'Adobe Photoshop'
           });
+          act(() => jest.runAllTimers());
+          await user.tab({shift: true});
+          await user.tab({shift: true});
+          await user.keyboard('{ArrowLeft}');
 
           // Drop on folder in same table
-          await beginDrag(tree);
-          fireEvent.keyDown(document.activeElement, {key: 'ArrowDown'});
-          fireEvent.keyUp(document.activeElement, {key: 'ArrowDown'});
-          fireEvent.keyDown(document.activeElement, {key: 'ArrowDown'});
-          fireEvent.keyUp(document.activeElement, {key: 'ArrowDown'});
+          async function beginDrag2(tree) {
+            let grids = tree.getAllByRole('grid');
+            let rowgroup = within(grids[0]).getAllByRole('rowgroup')[1];
+            let row = within(rowgroup).getAllByRole('row')[0];
+            let cell = within(row).getAllByRole('rowheader')[0];
+            expect(cell).toHaveTextContent('Adobe Photoshop');
+            expect(row).toHaveAttribute('draggable', 'true');
+
+            let draghandle = within(row).getAllByRole('button')[0];
+            expect(draghandle).toBeTruthy();
+            expect(draghandle).toHaveAttribute('draggable', 'true');
+            await user.keyboard('{ArrowRight}');
+            expect(document.activeElement).toBe(draghandle);
+            await user.keyboard('{Enter}');
+            act(() => jest.runAllTimers());
+          }
+
+          await beginDrag2(tree);
+          await user.keyboard('{ArrowDown}');
+          await user.keyboard('{ArrowDown}');
           expect(document.activeElement).toHaveAttribute('aria-label', 'Drop on Documents');
-          fireEvent.keyDown(document.activeElement, {key: 'Enter'});
-          fireEvent.keyUp(document.activeElement, {key: 'Enter'});
+          await user.keyboard('{Enter}');
 
           expect(onReorder).toHaveBeenCalledTimes(0);
           expect(onItemDrop).toHaveBeenCalledTimes(2);
@@ -2259,20 +2293,34 @@ describe('TableView', function () {
 
           await beginDrag(tree);
           await user.tab();
-          fireEvent.keyDown(document.activeElement, {key: 'ArrowDown'});
-          fireEvent.keyUp(document.activeElement, {key: 'ArrowDown'});
+          await user.keyboard('{ArrowDown}');
           // Should allow insert since we provide all handlers
           expect(document.activeElement).toHaveAttribute('aria-label', 'Insert before Pictures');
-          fireEvent.keyDown(document.activeElement, {key: 'Escape'});
-          fireEvent.keyUp(document.activeElement, {key: 'Escape'});
+          await user.keyboard('{Escape}');
 
           tree.rerender(<DragBetweenTablesComplex secondTableDnDOptions={{...mockUtilityOptions, onRootDrop: null, onInsert: null}} />);
-          await beginDrag(tree);
+          await user.tab({shift: true});
+          await user.tab({shift: true});
+          await user.keyboard('{ArrowLeft}');
+          await user.keyboard('{ArrowRight}');
+
+          let grids = tree.getAllByRole('grid');
+          let rowgroup = within(grids[0]).getAllByRole('rowgroup')[1];
+          let row = within(rowgroup).getAllByRole('row')[0];
+          let cell = within(row).getAllByRole('rowheader')[0];
+          expect(cell).toHaveTextContent('Adobe Photoshop');
+          expect(row).toHaveAttribute('draggable', 'true');
+
+          let draghandle = within(row).getAllByRole('button')[0];
+          expect(draghandle).toBeTruthy();
+          expect(draghandle).toHaveAttribute('draggable', 'true');
+          expect(document.activeElement).toBe(draghandle);
+          await user.keyboard('{Enter}');
+          act(() => jest.runAllTimers());
           await user.tab();
           // Should automatically jump to the folder target since we didn't provide onRootDrop and onInsert
           expect(document.activeElement).toHaveAttribute('aria-label', 'Drop on Pictures');
-          fireEvent.keyDown(document.activeElement, {key: 'ArrowDown'});
-          fireEvent.keyUp(document.activeElement, {key: 'ArrowDown'});
+          await user.keyboard('{ArrowDown}');
           expect(document.activeElement).toHaveAttribute('aria-label', 'Drop on Apps');
         });
 
@@ -2588,13 +2636,11 @@ describe('TableView', function () {
         grid = getByRole('grid');
         rowgroups = within(grid).getAllByRole('rowgroup');
         rows = within(rowgroups[1]).getAllByRole('row');
-        expect(within(rows[0]).getAllByRole('rowheader')[0]).toHaveTextContent('Vin');
-        // TODO
-        // expect(within(rows[1]).getAllByRole('rowheader')[0]).toHaveTextContent('Dodie');
-        // expect(within(rows[2]).getAllByRole('rowheader')[0]).toHaveTextContent('Lexy');
-        // expect(within(rows[3]).getAllByRole('rowheader')[0]).toHaveTextContent('Robbi');
-
-        // expect(document.activeElement).toBe(rows[3]);
+        expect(within(rows[0]).getAllByRole('rowheader')[0]).toHaveTextContent('Robbi');
+        expect(within(rows[1]).getAllByRole('rowheader')[0]).toHaveTextContent('Vin');
+        expect(within(rows[2]).getAllByRole('rowheader')[0]).toHaveTextContent('Lexy');
+        expect(within(rows[3]).getAllByRole('rowheader')[0]).toHaveTextContent('Dodie');
+        expect(document.activeElement).toBe(rows[2]);
       });
 
       it('should allow moving one row into another table', async function () {
@@ -2793,6 +2839,7 @@ describe('TableView', function () {
         expect(draggableRow).toHaveAttribute('aria-selected', 'false');
         expect(onSelectionChange).toHaveBeenCalledTimes(0);
         fireEvent.pointerUp(draggableRow, {pointerType: 'mouse'});
+        fireEvent.click(draggableRow);
         expect(draggableRow).toHaveAttribute('aria-selected', 'true');
         checkSelection(onSelectionChange, ['a']);
       });
@@ -2832,11 +2879,11 @@ describe('TableView', function () {
       expect(dragHandle.style).toBeTruthy();
       expect(dragHandle.style.position).toBe('absolute');
 
-      fireEvent.pointerDown(rows[0], {pointerType: 'mouse', button: 0, pointerId: 1});
+      await user.pointer({target: rows[0], keys: '[MouseLeft>]'});
       dragHandle = within(rows[0]).getAllByRole('button')[0];
       expect(dragHandle.style).toBeTruthy();
       expect(dragHandle.style.position).toBe('absolute');
-      fireEvent.pointerUp(rows[0], {button: 0, pointerId: 1});
+      await user.pointer({target: rows[0], keys: '[/MouseLeft]'});
 
       fireEvent.pointerEnter(rows[0], {pointerType: 'mouse'});
       dragHandle = within(rows[0]).getAllByRole('button')[0];
@@ -2844,13 +2891,12 @@ describe('TableView', function () {
       expect(dragHandle.style.position).toBe('absolute');
 
       // If dragHandle doesn't have a position applied, it isn't visually hidden
-      fireEvent.keyDown(rows[0], {key: 'Enter'});
-      fireEvent.keyUp(rows[0], {key: 'Enter'});
+      await user.keyboard('{Enter}');
       dragHandle = within(rows[0]).getAllByRole('button')[0];
       expect(dragHandle.style.position).toBe('');
     });
 
-    it('should not display the drag handle on hover, press, or keyboard focus for disabled/non dragggable items', async function () {
+    it('should display the drag handle on hover, press, or keyboard focus for disabled/non dragggable items with disabledBehavior="select"', async function () {
       function hasDragHandle(el) {
         let buttons = within(el).queryAllByRole('button');
         if (buttons.length === 0) {
@@ -2860,7 +2906,43 @@ describe('TableView', function () {
       }
 
       let {getByRole} = render(
-        <DraggableTableView tableViewProps={{disabledKeys: ['a']}} />
+        <DraggableTableView tableViewProps={{disabledBehavior: 'select', disabledKeys: ['a']}} />
+      );
+
+      let grid = getByRole('grid');
+      let rowgroups = within(grid).getAllByRole('rowgroup');
+      let rows = within(rowgroups[1]).getAllByRole('row');
+
+      await user.tab();
+      expect(hasDragHandle(rows[0])).toBeTruthy();
+      moveFocus('ArrowDown');
+      expect(hasDragHandle(rows[1])).toBeTruthy();
+
+      await user.pointer({target: rows[0], keys: '[MouseLeft>]'});
+      expect(hasDragHandle(rows[0])).toBeTruthy();
+      await user.pointer({target: rows[0], keys: '[/MouseLeft]'});
+
+      await user.pointer({target: rows[1], keys: '[MouseLeft>]'});
+      expect(hasDragHandle(rows[1])).toBeTruthy();
+      await user.pointer({target: rows[1], keys: '[/MouseLeft]'});
+
+      fireEvent.pointerEnter(rows[0]);
+      expect(hasDragHandle(rows[0])).toBeTruthy();
+      fireEvent.pointerEnter(rows[1]);
+      expect(hasDragHandle(rows[1])).toBeTruthy();
+    });
+
+    it('should not display the drag handle on hover, press, or keyboard focus for disabled/non dragggable items with disabledBehavior="all"', async function () {
+      function hasDragHandle(el) {
+        let buttons = within(el).queryAllByRole('button');
+        if (buttons.length === 0) {
+          return false;
+        }
+        return buttons[0].getAttribute('draggable');
+      }
+
+      let {getByRole} = render(
+        <DraggableTableView tableViewProps={{disabledBehavior: 'all', disabledKeys: ['a']}} />
       );
 
       let grid = getByRole('grid');
@@ -2944,24 +3026,20 @@ describe('TableView', function () {
       let rowgroups = within(grid).getAllByRole('rowgroup');
       let rows = within(rowgroups[1]).getAllByRole('row');
       expect(rows).toHaveLength(9);
-      moveFocus('ArrowDown');
-      fireEvent.keyDown(document.activeElement, {key: 'Enter'});
-      fireEvent.keyUp(document.activeElement, {key: 'Enter'});
-      moveFocus('ArrowDown');
-      fireEvent.keyDown(document.activeElement, {key: 'Enter'});
-      fireEvent.keyUp(document.activeElement, {key: 'Enter'});
-      moveFocus('ArrowDown');
-      fireEvent.keyDown(document.activeElement, {key: 'Enter'});
-      fireEvent.keyUp(document.activeElement, {key: 'Enter'});
+      await user.keyboard('{ArrowDown}');
+      await user.keyboard('{Enter}');
+      await user.keyboard('{ArrowDown}');
+      await user.keyboard('{Enter}');
+      await user.keyboard('{ArrowDown}');
+      await user.keyboard('{Enter}');
 
       expect(new Set(onSelectionChange.mock.calls[2][0])).toEqual(new Set(['1', '2', '3']));
       let draghandle = within(rows[2]).getAllByRole('button')[0];
       expect(draghandle).toBeTruthy();
       expect(draghandle).toHaveAttribute('draggable', 'true');
 
-      moveFocus('ArrowRight');
-      fireEvent.keyDown(draghandle, {key: 'Enter'});
-      fireEvent.keyUp(draghandle, {key: 'Enter'});
+      await user.keyboard('{ArrowRight}');
+      await user.keyboard('{Enter}');
 
       expect(onDragStart).toHaveBeenCalledTimes(1);
       expect(onDragStart).toHaveBeenCalledWith({
@@ -2975,8 +3053,7 @@ describe('TableView', function () {
       let droppableButton = await within(document).findByLabelText('Drop on Folder 2', {hidden: true});
       expect(document.activeElement).toBe(droppableButton);
 
-      fireEvent.keyDown(droppableButton, {key: 'Enter'});
-      fireEvent.keyUp(droppableButton, {key: 'Enter'});
+      await user.keyboard('{Enter}');
       await act(async () => Promise.resolve());
       act(() => jest.runAllTimers());
 
@@ -3000,25 +3077,26 @@ describe('TableView', function () {
       rows = within(rowgroups[1]).getAllByRole('row');
       expect(rows).toHaveLength(6);
 
-      // Select the folder and perform a drag. Drag start shouldn't include the previously selected items
-      moveFocus('ArrowDown');
-      fireEvent.keyDown(document.activeElement, {key: 'Enter'});
-      fireEvent.keyUp(document.activeElement, {key: 'Enter'});
+      // Select the folder and perform a drag on a different item that isn't selected. Drag start shouldn't include the previously selected items/folders
+      await user.keyboard('{ArrowDown}');
+      await user.keyboard('{Enter}');
       // Selection change event still has all keys
       expect(new Set(onSelectionChange.mock.calls[0][0])).toEqual(new Set(['1', '2', '3', '8']));
 
-      draghandle = within(rows[0]).getAllByRole('button')[0];
+      draghandle = within(rows[4]).getAllByRole('button')[0];
       expect(draghandle).toBeTruthy();
       expect(draghandle).toHaveAttribute('draggable', 'true');
-      moveFocus('ArrowRight');
-      fireEvent.keyDown(draghandle, {key: 'Enter'});
-      fireEvent.keyUp(draghandle, {key: 'Enter'});
+
+      await user.keyboard('{ArrowUp}');
+      await user.keyboard('{ArrowUp}');
+      await user.keyboard('{ArrowRight}');
+      await user.keyboard('{Enter}');
       act(() => jest.runAllTimers());
 
       expect(onDragStart).toHaveBeenCalledTimes(1);
       expect(onDragStart).toHaveBeenCalledWith({
         type: 'dragstart',
-        keys: new Set(['0']),
+        keys: new Set(['6']),
         x: 50,
         y: 25
       });
@@ -3132,15 +3210,15 @@ describe('TableView', function () {
       let row = rows[0];
 
       await user.tab();
+      await user.tab();
       let draghandle = within(row).getAllByRole('button')[0];
-
-      fireEvent.keyDown(draghandle, {key: 'Enter'});
-      fireEvent.keyUp(draghandle, {key: 'Enter'});
+      await user.keyboard('{ArrowRight}');
+      expect(document.activeElement).toBe(draghandle);
+      await user.keyboard('{Enter}');
 
       act(() => jest.runAllTimers());
       expect(document.activeElement).toBe(droppable);
-      fireEvent.keyDown(droppable, {key: 'Enter'});
-      fireEvent.keyUp(droppable, {key: 'Enter'});
+      await user.keyboard('{Enter}');
 
       expect(getAllowedDropOperations).toHaveBeenCalledTimes(1);
 
@@ -3196,7 +3274,7 @@ describe('TableView', function () {
         expect(dragButtonD).toHaveAttribute('aria-label', 'Drag 3 selected items');
       });
 
-      it('disabled rows and invalid drop targets should become aria-hidden when keyboard drag session starts', function () {
+      it('disabled rows and invalid drop targets should become aria-hidden when keyboard drag session starts', async function () {
         let {getByRole} = render(
           <ReorderExample tableViewProps={{disabledKeys: ['2']}} />
         );
@@ -3211,8 +3289,10 @@ describe('TableView', function () {
         let row = rows[0];
         let draghandle = within(row).getAllByRole('button')[0];
         expect(row).toHaveAttribute('draggable', 'true');
-        fireEvent.keyDown(draghandle, {key: 'Enter'});
-        fireEvent.keyUp(draghandle, {key: 'Enter'});
+        await user.tab();
+        await user.keyboard('{ArrowRight}');
+        expect(document.activeElement).toBe(draghandle);
+        await user.keyboard('{Enter}');
         act(() => jest.runAllTimers());
 
         for (let [index, row] of rows.entries()) {

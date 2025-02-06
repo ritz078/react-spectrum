@@ -10,9 +10,28 @@
  * governing permissions and limitations under the License.
  */
 
-import {act, fireEvent, mockClickDefault, pointerMap, render, within} from '@react-spectrum/test-utils';
-import {Button, Checkbox, DropIndicator, GridList, GridListContext, GridListItem, useDragAndDrop} from '../';
+import {act, fireEvent, mockClickDefault, pointerMap, render, within} from '@react-spectrum/test-utils-internal';
+import {
+  Button,
+  Checkbox,
+  Dialog,
+  DialogTrigger,
+  DropIndicator,
+  GridList,
+  GridListContext,
+  GridListItem,
+  Label,
+  UNSTABLE_ListLayout as ListLayout,
+  Modal,
+  RouterProvider,
+  Tag,
+  TagGroup,
+  TagList,
+  useDragAndDrop,
+  UNSTABLE_Virtualizer as Virtualizer
+} from '../';
 import React from 'react';
+import {User} from '@react-aria/test-utils';
 import userEvent from '@testing-library/user-event';
 
 let TestGridList = ({listBoxProps, itemProps}) => (
@@ -42,6 +61,8 @@ let renderGridList = (listBoxProps, itemProps) => render(<TestGridList {...{list
 
 describe('GridList', () => {
   let user;
+  let testUtilUser = new User();
+
   beforeAll(() => {
     user = userEvent.setup({delay: null, pointerMap});
     jest.useFakeTimers();
@@ -49,14 +70,16 @@ describe('GridList', () => {
 
   afterEach(() => {
     act(() => {jest.runAllTimers();});
+    jest.clearAllMocks();
   });
 
   it('should render with default classes', () => {
-    let {getByRole, getAllByRole} = renderGridList();
-    let grid = getByRole('grid');
-    expect(grid).toHaveAttribute('class', 'react-aria-GridList');
+    let {getByRole} = renderGridList();
+    let gridListTester = testUtilUser.createTester('GridList', {root: getByRole('grid')});
 
-    for (let row of getAllByRole('row')) {
+    expect(gridListTester.gridlist).toHaveAttribute('class', 'react-aria-GridList');
+
+    for (let row of gridListTester.rows) {
       expect(row).toHaveAttribute('class', 'react-aria-GridListItem');
     }
   });
@@ -105,8 +128,18 @@ describe('GridList', () => {
     expect(itemRef.current).toBeInstanceOf(HTMLElement);
   });
 
+  it('should support autoFocus', () => {
+    let {getByRole} = renderGridList({autoFocus: true});
+    let gridList = getByRole('grid');
+
+    expect(document.activeElement).toBe(gridList);
+  });
+
   it('should support hover', async () => {
-    let {getAllByRole} = renderGridList({selectionMode: 'multiple'}, {className: ({isHovered}) => isHovered ? 'hover' : ''});
+    let onHoverStart = jest.fn();
+    let onHoverChange = jest.fn();
+    let onHoverEnd = jest.fn();
+    let {getAllByRole} = renderGridList({selectionMode: 'multiple'}, {className: ({isHovered}) => isHovered ? 'hover' : '', onHoverStart, onHoverChange, onHoverEnd});
     let row = getAllByRole('row')[0];
 
     expect(row).not.toHaveAttribute('data-hovered');
@@ -115,22 +148,35 @@ describe('GridList', () => {
     await user.hover(row);
     expect(row).toHaveAttribute('data-hovered', 'true');
     expect(row).toHaveClass('hover');
+    expect(onHoverStart).toHaveBeenCalledTimes(1);
+    expect(onHoverChange).toHaveBeenCalledTimes(1);
 
     await user.unhover(row);
     expect(row).not.toHaveAttribute('data-hovered');
     expect(row).not.toHaveClass('hover');
+    expect(onHoverEnd).toHaveBeenCalledTimes(1);
+    expect(onHoverChange).toHaveBeenCalledTimes(2);
   });
 
   it('should not show hover state when item is not interactive', async () => {
-    let {getAllByRole} = renderGridList({}, {className: ({isHovered}) => isHovered ? 'hover' : ''});
+    let onHoverStart = jest.fn();
+    let onHoverChange = jest.fn();
+    let onHoverEnd = jest.fn();
+    let {getAllByRole} = renderGridList({}, {className: ({isHovered}) => isHovered ? 'hover' : '', onHoverStart, onHoverChange, onHoverEnd});
     let row = getAllByRole('row')[0];
 
     expect(row).not.toHaveAttribute('data-hovered');
     expect(row).not.toHaveClass('hover');
+    expect(onHoverStart).not.toHaveBeenCalled();
+    expect(onHoverChange).not.toHaveBeenCalled();
+    expect(onHoverEnd).not.toHaveBeenCalled();
 
     await user.hover(row);
     expect(row).not.toHaveAttribute('data-hovered');
     expect(row).not.toHaveClass('hover');
+    expect(onHoverStart).not.toHaveBeenCalled();
+    expect(onHoverChange).not.toHaveBeenCalled();
+    expect(onHoverEnd).not.toHaveBeenCalled();
   });
 
   it('should support focus ring', async () => {
@@ -150,52 +196,53 @@ describe('GridList', () => {
     expect(row).not.toHaveClass('focus');
   });
 
-  it('should support press state', () => {
+  it('should support press state', async () => {
     let {getAllByRole} = renderGridList({selectionMode: 'multiple'}, {className: ({isPressed}) => isPressed ? 'pressed' : ''});
     let row = getAllByRole('row')[0];
 
     expect(row).not.toHaveAttribute('data-pressed');
     expect(row).not.toHaveClass('pressed');
 
-    fireEvent.mouseDown(row);
+    await user.pointer({target: row, keys: '[MouseLeft>]'});
     expect(row).toHaveAttribute('data-pressed', 'true');
     expect(row).toHaveClass('pressed');
 
-    fireEvent.mouseUp(row);
+    await user.pointer({target: row, keys: '[/MouseLeft]'});
     expect(row).not.toHaveAttribute('data-pressed');
     expect(row).not.toHaveClass('pressed');
   });
 
-  it('should not show press state when not interactive', () => {
+  it('should not show press state when not interactive', async () => {
     let {getAllByRole} = renderGridList({}, {className: ({isPressed}) => isPressed ? 'pressed' : ''});
     let row = getAllByRole('row')[0];
 
     expect(row).not.toHaveAttribute('data-pressed');
     expect(row).not.toHaveClass('pressed');
 
-    fireEvent.mouseDown(row);
+    await user.pointer({target: row, keys: '[MouseLeft>]'});
     expect(row).not.toHaveAttribute('data-pressed');
     expect(row).not.toHaveClass('pressed');
 
-    fireEvent.mouseUp(row);
+    await user.pointer({target: row, keys: '[/MouseLeft]'});
     expect(row).not.toHaveAttribute('data-pressed');
     expect(row).not.toHaveClass('pressed');
   });
 
   it('should support selection state', async () => {
-    let {getAllByRole} = renderGridList({selectionMode: 'multiple'}, {className: ({isSelected}) => isSelected ? 'selected' : ''});
-    let row = getAllByRole('row')[0];
+    let {getByRole} = renderGridList({selectionMode: 'multiple'}, {className: ({isSelected}) => isSelected ? 'selected' : ''});
+    let gridListTester = testUtilUser.createTester('GridList', {root: getByRole('grid')});
 
+    let row = gridListTester.rows[0];
     expect(row).not.toHaveAttribute('aria-selected', 'true');
     expect(row).not.toHaveClass('selected');
     expect(within(row).getByRole('checkbox')).not.toBeChecked();
 
-    await user.click(row);
+    await gridListTester.toggleRowSelection({row: 0});
     expect(row).toHaveAttribute('aria-selected', 'true');
     expect(row).toHaveClass('selected');
     expect(within(row).getByRole('checkbox')).toBeChecked();
 
-    await user.click(row);
+    await gridListTester.toggleRowSelection({row: 0});
     expect(row).not.toHaveAttribute('aria-selected', 'true');
     expect(row).not.toHaveClass('selected');
     expect(within(row).getByRole('checkbox')).not.toBeChecked();
@@ -209,6 +256,56 @@ describe('GridList', () => {
     expect(row).toHaveClass('disabled');
 
     expect(within(row).getByRole('checkbox')).toBeDisabled();
+  });
+
+  it('should support isDisabled prop on items', async () => {
+    let {getByRole} = render(
+      <GridList aria-label="Test">
+        <GridListItem id="cat">Cat</GridListItem>
+        <GridListItem id="dog" textValue="Dog" isDisabled>Dog <Button aria-label="Info">ⓘ</Button></GridListItem>
+        <GridListItem id="kangaroo">Kangaroo</GridListItem>
+      </GridList>
+    );
+
+    let gridListTester = testUtilUser.createTester('GridList', {root: getByRole('grid')});
+    let rows = gridListTester.rows;
+    expect(rows[1]).toHaveAttribute('aria-disabled', 'true');
+    expect(within(rows[1]).getByRole('button')).toBeDisabled();
+
+    await user.tab();
+    expect(document.activeElement).toBe(rows[0]);
+    await user.keyboard('{ArrowDown}');
+    expect(document.activeElement).toBe(rows[2]);
+  });
+
+  it('should support onAction on items', async () => {
+    let onAction = jest.fn();
+    let {getAllByRole} = render(
+      <GridList aria-label="Test">
+        <GridListItem id="cat" onAction={onAction}>Cat</GridListItem>
+        <GridListItem id="dog">Dog</GridListItem>
+        <GridListItem id="kangaroo">Kangaroo</GridListItem>
+      </GridList>
+    );
+    let items = getAllByRole('row');
+    await user.click(items[0]);
+    expect(onAction).toHaveBeenCalledTimes(1);
+  });
+
+  it('should support onAction on list and list items', async () => {
+    let onAction = jest.fn();
+    let itemAction = jest.fn();
+    let {getAllByRole} = render(
+      <GridList aria-label="Test" onAction={onAction}>
+        <GridListItem id="cat" onAction={itemAction}>Cat</GridListItem>
+        <GridListItem id="dog">Dog</GridListItem>
+        <GridListItem id="kangaroo">Kangaroo</GridListItem>
+      </GridList>
+    );
+    let items = getAllByRole('row');
+    await user.click(items[0]);
+    expect(onAction).toHaveBeenCalledWith('cat');
+    expect(itemAction).toHaveBeenCalledTimes(1);
   });
 
   it('should support empty state', () => {
@@ -246,6 +343,162 @@ describe('GridList', () => {
     expect(onScroll).toHaveBeenCalled();
   });
 
+  it('should support grid layout', async () => {
+    let buttonRef = React.createRef();
+    let {getAllByRole} = render(
+      <GridList aria-label="Test" layout="grid">
+        <GridListItem id="cat">Cat</GridListItem>
+        <GridListItem id="dog" textValue="Dog">Dog <Button aria-label="Info" ref={buttonRef}>ⓘ</Button></GridListItem>
+        <GridListItem id="kangaroo">Kangaroo</GridListItem>
+      </GridList>
+    );
+
+    let items = getAllByRole('row');
+
+    await user.tab();
+    expect(document.activeElement).toBe(items[0]);
+
+    await user.keyboard('{ArrowRight}');
+    expect(document.activeElement).toBe(items[1]);
+
+    await user.keyboard('{ArrowRight}');
+    expect(document.activeElement).toBe(items[2]);
+
+    await user.keyboard('{ArrowLeft}');
+    expect(document.activeElement).toBe(items[1]);
+
+    await user.tab();
+    expect(document.activeElement).toBe(buttonRef.current);
+
+    await user.tab();
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it('should support selectionMode="replace" with checkboxes', async () => {
+    let {getAllByRole} = renderGridList({selectionMode: 'multiple', selectionBehavior: 'replace'});
+    let items = getAllByRole('row');
+
+    await user.click(items[0]);
+    await user.click(items[1]);
+
+    expect(items[0]).toHaveAttribute('aria-selected', 'false');
+    expect(items[1]).toHaveAttribute('aria-selected', 'true');
+    expect(items[2]).toHaveAttribute('aria-selected', 'false');
+
+    await user.click(within(items[2]).getByRole('checkbox'));
+
+    expect(items[0]).toHaveAttribute('aria-selected', 'false');
+    expect(items[1]).toHaveAttribute('aria-selected', 'true');
+    expect(items[2]).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('should support virtualizer', async () => {
+    let layout = new ListLayout({
+      rowHeight: 25
+    });
+
+    let items = [];
+    for (let i = 0; i < 50; i++) {
+      items.push({id: i, name: 'Item ' + i});
+    }
+
+    jest.spyOn(window.HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(() => 100);
+    jest.spyOn(window.HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(() => 100);
+
+    let {getByRole, getAllByRole} = render(
+      <Virtualizer layout={layout}>
+        <GridList aria-label="Test" items={items}>
+          {item => <GridListItem>{item.name}</GridListItem>}
+        </GridList>
+      </Virtualizer>
+    );
+
+    let rows = getAllByRole('row');
+    expect(rows).toHaveLength(7);
+    expect(rows.map(r => r.textContent)).toEqual(['Item 0', 'Item 1', 'Item 2', 'Item 3', 'Item 4', 'Item 5', 'Item 6']);
+    for (let row of rows) {
+      expect(row).toHaveAttribute('aria-rowindex');
+    }
+
+    let grid = getByRole('grid');
+    grid.scrollTop = 200;
+    fireEvent.scroll(grid);
+
+    rows = getAllByRole('row');
+    expect(rows).toHaveLength(8);
+    expect(rows.map(r => r.textContent)).toEqual(['Item 7', 'Item 8', 'Item 9', 'Item 10', 'Item 11', 'Item 12', 'Item 13', 'Item 14']);
+
+    await user.tab();
+    await user.keyboard('{End}');
+
+    rows = getAllByRole('row');
+    expect(rows).toHaveLength(9);
+    expect(rows.map(r => r.textContent)).toEqual(['Item 7', 'Item 8', 'Item 9', 'Item 10', 'Item 11', 'Item 12', 'Item 13', 'Item 14', 'Item 49']);
+  });
+
+  it('should support rendering a TagGroup inside a GridListItem', async () => {
+    let buttonRef = React.createRef();
+    let {getAllByRole} = render(
+      <GridList aria-label="Test">
+        <GridListItem data-test-id="grid-list" id="tags" textValue="tags">
+          <TagGroup aria-label="Tag group">
+            <TagList>
+              <Tag key="1">Tag 1</Tag>
+              <Tag key="2">Tag 2</Tag>
+              <Tag key="3">Tag 3</Tag>
+            </TagList>
+          </TagGroup>
+        </GridListItem>
+        <GridListItem id="dog" textValue="Dog">Dog <Button aria-label="Info" ref={buttonRef}>ⓘ</Button></GridListItem>
+        <GridListItem id="kangaroo">Kangaroo</GridListItem>
+      </GridList>
+    );
+
+    let items = getAllByRole('grid')[0].children;
+    let tags = within(items[0]).getAllByRole('row');
+
+    await user.tab();
+    expect(document.activeElement).toBe(items[0]);
+
+    await user.keyboard('{ArrowRight}');
+    expect(document.activeElement).toBe(tags[0]);
+
+    await user.keyboard('{ArrowRight}');
+    expect(document.activeElement).toBe(tags[1]);
+
+    await user.keyboard('{ArrowDown}');
+    expect(document.activeElement).toBe(items[1]);
+
+    await user.tab();
+    expect(document.activeElement).toBe(buttonRef.current);
+
+    await user.tab();
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it('should not propagate the checkbox context from selection into other cells', async () => {
+    let tree = render(
+      <GridList aria-label="Test" selectionMode="multiple">
+        <GridListItem id="dialog" textValue="dialog">
+          <DialogTrigger>
+            <Button>Open</Button>
+            <Modal>
+              <Dialog>
+                <Checkbox><Label>Agree</Label></Checkbox>
+              </Dialog>
+            </Modal>
+          </DialogTrigger>
+        </GridListItem>
+        <GridListItem id="dog" textValue="Dog">Dog</GridListItem>
+        <GridListItem id="kangaroo">Kangaroo</GridListItem>
+      </GridList>
+    );
+
+    await user.click(tree.getByRole('button'));
+    let checkbox = tree.getByRole('checkbox');
+    expect(checkbox).toBeInTheDocument();
+  });
+
   describe('drag and drop', () => {
     it('should support drag button slot', () => {
       let {getAllByRole} = render(<DraggableGridList />);
@@ -253,22 +506,22 @@ describe('GridList', () => {
       expect(button).toHaveAttribute('aria-label', 'Drag Cat');
     });
 
-    it('should render drop indicators', () => {
+    it('should render drop indicators', async () => {
       let onReorder = jest.fn();
       let {getAllByRole} = render(<DraggableGridList onReorder={onReorder} renderDropIndicator={(target) => <DropIndicator target={target}>Test</DropIndicator>} />);
-      let button = getAllByRole('button')[0];
-      fireEvent.keyDown(button, {key: 'Enter'});
-      fireEvent.keyUp(button, {key: 'Enter'});
+      await user.tab();
+      await user.keyboard('{ArrowRight}');
+      await user.keyboard('{Enter}');
       act(() => jest.runAllTimers());
 
       let rows = getAllByRole('row');
       expect(rows).toHaveLength(5);
       expect(rows[0]).toHaveAttribute('class', 'react-aria-DropIndicator');
-      expect(rows[0]).toHaveAttribute('data-drop-target', 'true');
+      expect(rows[0]).not.toHaveAttribute('data-drop-target', 'true');
       expect(rows[0]).toHaveTextContent('Test');
       expect(within(rows[0]).getByRole('button')).toHaveAttribute('aria-label', 'Insert before Cat');
       expect(rows[2]).toHaveAttribute('class', 'react-aria-DropIndicator');
-      expect(rows[2]).not.toHaveAttribute('data-drop-target');
+      expect(rows[2]).toHaveAttribute('data-drop-target');
       expect(within(rows[2]).getByRole('button')).toHaveAttribute('aria-label', 'Insert between Cat and Dog');
       expect(rows[3]).toHaveAttribute('class', 'react-aria-DropIndicator');
       expect(rows[3]).not.toHaveAttribute('data-drop-target');
@@ -277,30 +530,29 @@ describe('GridList', () => {
       expect(rows[4]).not.toHaveAttribute('data-drop-target');
       expect(within(rows[4]).getByRole('button')).toHaveAttribute('aria-label', 'Insert after Kangaroo');
 
-      fireEvent.keyDown(document.activeElement, {key: 'ArrowDown'});
-      fireEvent.keyUp(document.activeElement, {key: 'ArrowDown'});
+      await user.keyboard('{ArrowDown}');
 
-      expect(document.activeElement).toHaveAttribute('aria-label', 'Insert between Cat and Dog');
+      expect(document.activeElement).toHaveAttribute('aria-label', 'Insert between Dog and Kangaroo');
       expect(rows[0]).not.toHaveAttribute('data-drop-target', 'true');
-      expect(rows[2]).toHaveAttribute('data-drop-target', 'true');
+      expect(rows[2]).not.toHaveAttribute('data-drop-target', 'true');
+      expect(rows[3]).toHaveAttribute('data-drop-target', 'true');
 
-      fireEvent.keyDown(document.activeElement, {key: 'Enter'});
-      fireEvent.keyUp(document.activeElement, {key: 'Enter'});
+      await user.keyboard('{Enter}');
       act(() => jest.runAllTimers());
 
       expect(onReorder).toHaveBeenCalledTimes(1);
     });
 
-    it('should support dropping on rows', () => {
+    it('should support dropping on rows', async () => {
       let onItemDrop = jest.fn();
       let {getAllByRole} = render(<>
         <DraggableGridList />
         <DraggableGridList onItemDrop={onItemDrop} />
       </>);
 
-      let button = getAllByRole('button')[0];
-      fireEvent.keyDown(button, {key: 'Enter'});
-      fireEvent.keyUp(button, {key: 'Enter'});
+      await user.tab();
+      await user.keyboard('{ArrowRight}');
+      await user.keyboard('{Enter}');
       act(() => jest.runAllTimers());
 
       let grids = getAllByRole('grid');
@@ -315,23 +567,22 @@ describe('GridList', () => {
 
       expect(document.activeElement).toBe(within(rows[0]).getByRole('button'));
 
-      fireEvent.keyDown(document.activeElement, {key: 'Enter'});
-      fireEvent.keyUp(document.activeElement, {key: 'Enter'});
+      await user.keyboard('{Enter}');
       act(() => jest.runAllTimers());
 
       expect(onItemDrop).toHaveBeenCalledTimes(1);
     });
 
-    it('should support dropping on the root', () => {
+    it('should support dropping on the root', async () => {
       let onRootDrop = jest.fn();
       let {getAllByRole} = render(<>
         <DraggableGridList />
         <DraggableGridList onRootDrop={onRootDrop} />
       </>);
 
-      let button = getAllByRole('button')[0];
-      fireEvent.keyDown(button, {key: 'Enter'});
-      fireEvent.keyUp(button, {key: 'Enter'});
+      await user.tab();
+      await user.keyboard('{ArrowRight}');
+      await user.keyboard('{Enter}');
       act(() => jest.runAllTimers());
 
       let grids = getAllByRole('grid');
@@ -341,8 +592,7 @@ describe('GridList', () => {
       expect(document.activeElement).toBe(within(rows[0]).getByRole('button'));
       expect(grids[1]).toHaveAttribute('data-drop-target', 'true');
 
-      fireEvent.keyDown(document.activeElement, {key: 'Enter'});
-      fireEvent.keyUp(document.activeElement, {key: 'Enter'});
+      await user.keyboard('{Enter}');
       act(() => jest.runAllTimers());
 
       expect(onRootDrop).toHaveBeenCalledTimes(1);
@@ -375,6 +625,9 @@ describe('GridList', () => {
         }
 
         let onClick = mockClickDefault();
+        if (type === 'keyboard') {
+          await user.tab();
+        }
         await trigger(items[0]);
         expect(onClick).toHaveBeenCalledTimes(1);
         expect(onClick.mock.calls[0][0].target).toBeInstanceOf(HTMLAnchorElement);
@@ -396,6 +649,9 @@ describe('GridList', () => {
         }
 
         let onClick = mockClickDefault();
+        if (type === 'keyboard') {
+          await user.tab();
+        }
         await trigger(items[0]);
         expect(onClick).toHaveBeenCalledTimes(1);
         expect(onClick.mock.calls[0][0].target).toBeInstanceOf(HTMLAnchorElement);
@@ -404,6 +660,10 @@ describe('GridList', () => {
         await user.click(within(items[0]).getByRole('checkbox'));
         expect(items[0]).toHaveAttribute('aria-selected', 'true');
 
+
+        if (type === 'keyboard') {
+          await user.keyboard('{ArrowDown}');
+        }
         await trigger(items[1], ' ');
         expect(onClick).toHaveBeenCalledTimes(1);
         expect(items[1]).toHaveAttribute('aria-selected', 'true');
@@ -427,8 +687,12 @@ describe('GridList', () => {
         if (type === 'mouse') {
           await user.click(items[0]);
         } else {
-          fireEvent.keyDown(items[0], {key: ' '});
-          fireEvent.keyUp(items[0], {key: ' '});
+          await user.tab();
+          await user.keyboard(' ');
+          if (selectionMode === 'single') {
+            // single selection with replace will follow focus
+            await user.keyboard(' ');
+          }
         }
         expect(onClick).not.toHaveBeenCalled();
         expect(items[0]).toHaveAttribute('aria-selected', 'true');
@@ -436,12 +700,32 @@ describe('GridList', () => {
         if (type === 'mouse') {
           await user.dblClick(items[0], {pointerType: 'mouse'});
         } else {
-          fireEvent.keyDown(items[0], {key: 'Enter'});
-          fireEvent.keyUp(items[0], {key: 'Enter'});
+          await user.keyboard('{Enter}');
         }
         expect(onClick).toHaveBeenCalledTimes(1);
         expect(onClick.mock.calls[0][0].target).toBeInstanceOf(HTMLAnchorElement);
         expect(onClick.mock.calls[0][0].target.href).toBe('https://google.com/');
+      });
+
+      it('should work with RouterProvider', async () => {
+        let navigate = jest.fn();
+        let useHref = href => '/base' + href;
+        let {getAllByRole} = render(
+          <RouterProvider navigate={navigate} useHref={useHref}>
+            <GridList aria-label="listview">
+              <GridListItem href="/foo" routerOptions={{foo: 'bar'}}>One</GridListItem>
+            </GridList>
+          </RouterProvider>
+        );
+
+        let items = getAllByRole('row');
+        expect(items[0]).toHaveAttribute('data-href', '/base/foo');
+
+        if (type === 'keyboard') {
+          await user.tab();
+        }
+        await trigger(items[0]);
+        expect(navigate).toHaveBeenCalledWith('/foo', {foo: 'bar'});
       });
     });
   });

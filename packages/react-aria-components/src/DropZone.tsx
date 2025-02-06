@@ -13,7 +13,7 @@
 import {AriaLabelingProps, HoverEvents} from '@react-types/shared';
 import {ContextValue, Provider, RenderProps, SlotProps, useContextProps, useRenderProps} from './utils';
 import {DropOptions, mergeProps, useButton, useClipboard, useDrop, useFocusRing, useHover, useLocalizedStringFormatter, VisuallyHidden} from 'react-aria';
-import {filterDOMProps, useLabels, useSlotId} from '@react-aria/utils';
+import {filterDOMProps, isFocusable, useLabels, useObjectRef, useSlotId} from '@react-aria/utils';
 // @ts-ignore
 import intlMessages from '../intl/*.json';
 import React, {createContext, ForwardedRef, forwardRef, useRef} from 'react';
@@ -44,16 +44,20 @@ export interface DropZoneRenderProps {
    * Whether the dropzone is disabled.
    * @selector [data-disabled]
    */
-  isDisabled?: boolean
+  isDisabled: boolean
 }
 
 export interface DropZoneProps extends Omit<DropOptions, 'getDropOperationForPoint' | 'ref' | 'hasDropButton'>, HoverEvents, RenderProps<DropZoneRenderProps>, SlotProps, AriaLabelingProps {}
 
 export const DropZoneContext = createContext<ContextValue<DropZoneProps, HTMLDivElement>>(null);
 
-function DropZone(props: DropZoneProps, ref: ForwardedRef<HTMLDivElement>) {
-  let {isDisabled} = props;
+/**
+ * A drop zone is an area into which one or multiple objects can be dragged and dropped.
+ */
+export const DropZone = forwardRef(function DropZone(props: DropZoneProps, ref: ForwardedRef<HTMLDivElement>) {
+  let {isDisabled = false} = props;
   [props, ref] = useContextProps(props, ref, DropZoneContext);
+  let dropzoneRef = useObjectRef(ref);
   let buttonRef = useRef<HTMLButtonElement>(null);
   let {dropProps, dropButtonProps, isDropTarget} = useDrop({...props, ref: buttonRef, hasDropButton: true});
   let {buttonProps} = useButton(dropButtonProps || {}, buttonRef);
@@ -62,12 +66,11 @@ function DropZone(props: DropZoneProps, ref: ForwardedRef<HTMLDivElement>) {
   let stringFormatter = useLocalizedStringFormatter(intlMessages, 'react-aria-components');
 
   let textId = useSlotId();
-  let dropzoneId = useSlotId();
   let ariaLabel = props['aria-label'] || stringFormatter.format('dropzoneLabel');
   let messageId = props['aria-labelledby'];
-  // Chrome + VO will not announce the drop zone's accessible name if useLabels combines an aria-label and aria-labelledby
-  let ariaLabelledby = [dropzoneId, textId, messageId].filter(Boolean).join(' ');
-  let labelProps = useLabels({'aria-labelledby': ariaLabelledby});
+  let ariaLabelledby = [textId, messageId].filter(Boolean).join(' ');
+  let labelProps = useLabels({'aria-label': ariaLabel, 'aria-labelledby': ariaLabelledby});
+
 
   let {clipboardProps} = useClipboard({
     isDisabled,
@@ -82,7 +85,7 @@ function DropZone(props: DropZoneProps, ref: ForwardedRef<HTMLDivElement>) {
 
   let renderProps = useRenderProps({
     ...props,
-    values: {isHovered, isFocused, isFocusVisible, isDropTarget},
+    values: {isHovered, isFocused, isFocusVisible, isDropTarget, isDisabled},
     defaultClassName: 'react-aria-DropZone'
   });
   let DOMProps = filterDOMProps(props);
@@ -98,23 +101,26 @@ function DropZone(props: DropZoneProps, ref: ForwardedRef<HTMLDivElement>) {
         {...mergeProps(dropProps, hoverProps, DOMProps)}
         {...renderProps}
         slot={props.slot || undefined}
-        ref={ref}
+        ref={dropzoneRef}
         onClick={(e) => {
-          let target = e.target as HTMLElement;
-          if (!target.matches('input')) {
-            buttonRef.current?.focus();
+          let target = e.target as HTMLElement | null;
+          while (target && dropzoneRef.current?.contains(target)) {
+            if (isFocusable(target)) {
+              break;
+            } else if (target === dropzoneRef.current) {
+              buttonRef.current?.focus();
+              break;
+            }
+
+            target = target.parentElement;
           }
         }}
         data-hovered={isHovered || undefined}
         data-focused={isFocused || undefined}
         data-focus-visible={isFocusVisible || undefined}
-        data-drop-target={isDropTarget || undefined} 
+        data-drop-target={isDropTarget || undefined}
         data-disabled={isDisabled || undefined}>
         <VisuallyHidden>
-          {/* Added as a workaround for a Chrome + VO bug where it will not announce the aria label */}
-          <div id={dropzoneId} aria-hidden="true">
-            {ariaLabel}
-          </div>
           <button
             {...mergeProps(buttonProps, focusProps, clipboardProps, labelProps)}
             ref={buttonRef} />
@@ -123,10 +129,4 @@ function DropZone(props: DropZoneProps, ref: ForwardedRef<HTMLDivElement>) {
       </div>
     </Provider>
   );
-}
-
-/**
- * A drop zone is an area into which one or multiple objects can be dragged and dropped.
- */
-const _DropZone = forwardRef(DropZone);
-export {_DropZone as DropZone};
+});
