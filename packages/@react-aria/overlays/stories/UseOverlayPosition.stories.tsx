@@ -21,7 +21,9 @@ function Trigger(props: {
   withPortal: boolean,
   placement: Placement,
   maxHeight?: number,
-  buttonWidth?: number
+  buttonWidth?: number,
+  boundaryElement?: HTMLElement,
+  overlayStyle?: React.CSSProperties
 }) {
   const {withPortal, placement, maxHeight, buttonWidth} = props;
   const targetRef = React.useRef<HTMLButtonElement>(null);
@@ -39,7 +41,8 @@ function Trigger(props: {
     isOpen: state.isOpen,
     offset: 10,
     placement,
-    maxHeight
+    maxHeight,
+    boundaryElement: props.boundaryElement
   });
 
   let overlay = (
@@ -50,7 +53,8 @@ function Trigger(props: {
         ...overlayPositionProps.style,
         boxShadow: '0 0 4px 0 rgba(0,0,0,0.25)',
         backgroundColor: 'white',
-        overflow: 'auto'
+        overflow: 'auto',
+        ...props.overlayStyle
       }}>
       <ul
         style={{
@@ -133,4 +137,18 @@ export const MaxHeight200ContainerTop = () => (
 
 MaxHeight200ContainerTop.story = {
   name: 'maxHeight=200 container top'
+};
+
+export const BoundaryElement = () => {
+  const [boundaryElement, setBoundaryElement] = React.useState<HTMLElement | undefined>(undefined);
+
+  return (
+    <div style={{backgroundColor: 'red', width: '300px', height: '300px'}} ref={el => setBoundaryElement(el)}>
+      <Trigger withPortal maxHeight={200} placement="bottom" boundaryElement={boundaryElement} overlayStyle={{width: '150px'}} />
+    </div>
+  );
+};
+
+BoundaryElement.story = {
+  name: 'boundaryElement'
 };
